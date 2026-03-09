@@ -1,53 +1,80 @@
-import { Redirect, Route } from 'react-router-dom';
-import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
-import { IonReactRouter } from '@ionic/react-router';
-import Home from './pages/Home';
+import { useState, useEffect } from "react";
 
-/* Core CSS required for Ionic components to work properly */
-import '@ionic/react/css/core.css';
+import { IonApp, setupIonicReact } from "@ionic/react";
 
-/* Basic CSS for apps built with Ionic */
-import '@ionic/react/css/normalize.css';
-import '@ionic/react/css/structure.css';
-import '@ionic/react/css/typography.css';
+import { App as CapacitorApp } from "@capacitor/app";
 
-/* Optional CSS utils that can be commented out */
-import '@ionic/react/css/padding.css';
-import '@ionic/react/css/float-elements.css';
-import '@ionic/react/css/text-alignment.css';
-import '@ionic/react/css/text-transformation.css';
-import '@ionic/react/css/flex-utils.css';
-import '@ionic/react/css/display.css';
+import Home from "./pages/Home";
+import LockScreen from "./pages/LockScreen";
 
-/**
- * Ionic Dark Mode
- * -----------------------------------------------------
- * For more info, please see:
- * https://ionicframework.com/docs/theming/dark-mode
- */
+import { authenticateUser } from "./utils/biometric";
 
-/* import '@ionic/react/css/palettes/dark.always.css'; */
-/* import '@ionic/react/css/palettes/dark.class.css'; */
-import '@ionic/react/css/palettes/dark.system.css';
-
-/* Theme variables */
-import './theme/variables.css';
+const AUTO_LOCK_TIME = 60000; // 60 seg
 
 setupIonicReact();
 
-const App: React.FC = () => (
-  <IonApp>
-    <IonReactRouter>
-      <IonRouterOutlet>
-        <Route exact path="/home">
-          <Home />
-        </Route>
-        <Route exact path="/">
-          <Redirect to="/home" />
-        </Route>
-      </IonRouterOutlet>
-    </IonReactRouter>
-  </IonApp>
-);
+const MyApp: React.FC = () => {
 
-export default App;
+  const [lastActivity, setLastActivity] = useState(Date.now());
+
+  const [locked, setLocked] = useState(true);
+
+  const unlockApp = async () => {
+
+    console.log("Intentando desbloquear...");
+  
+    const verified = await authenticateUser();
+  
+    console.log("Resultado:", verified);
+  
+    if (verified) {
+      setLocked(false);
+    }
+  
+  };
+
+  useEffect(() => {
+
+    const resetTimer = () => {
+      setLastActivity(Date.now());
+    };
+    
+    window.addEventListener("touchstart", resetTimer);
+    window.addEventListener("click", resetTimer);
+
+    setInterval(() => {
+
+      if (Date.now() - lastActivity > AUTO_LOCK_TIME) {
+        setLocked(true);
+      }
+    
+    }, 5000);
+
+    unlockApp();
+
+    CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+
+      if (!isActive) {
+        setLocked(true);
+      }
+
+    });
+
+  }, []);
+
+  return (
+
+    <IonApp>
+
+      {locked
+        ? <LockScreen unlock={unlockApp} />
+        : <Home />
+      }
+
+    </IonApp>
+
+  );
+
+};
+
+export default MyApp;
