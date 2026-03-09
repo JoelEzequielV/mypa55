@@ -29,6 +29,10 @@ import { encryptPassword, decryptPassword } from "../utils/crypto";
 import { generatePassword } from "../utils/passwordGenerator";
 import { Clipboard } from "@capacitor/clipboard";
 
+import { databaseService } from "../services/database";
+
+import { Capacitor } from "@capacitor/core";
+
 const Home:React.FC = () => {
 
 const [search,setSearch] = useState("");
@@ -47,15 +51,19 @@ const [visiblePasswords,setVisiblePasswords] = useState<number[]>([]);
 const [toastMessage,setToastMessage] = useState("");
 const [showToast,setShowToast] = useState(false);
 
+const isNative = Capacitor.isNativePlatform();
+
+
+
+/* -----------------------------
+CARGAR CONTRASEÑAS
+----------------------------- */
 
 useEffect(()=>{
 
-const savedPasswords = localStorage.getItem("passwords");
-const savedFavorites = localStorage.getItem("favorites");
+loadPasswords();
 
-if(savedPasswords){
-setPasswords(JSON.parse(savedPasswords));
-}
+const savedFavorites = localStorage.getItem("favorites");
 
 if(savedFavorites){
 setFavorites(JSON.parse(savedFavorites));
@@ -65,15 +73,30 @@ setFavorites(JSON.parse(savedFavorites));
 
 
 
-useEffect(()=>{
+const loadPasswords = async () => {
 
-localStorage.setItem(
-"passwords",
-JSON.stringify(passwords)
-);
+if(isNative){
 
-},[passwords]);
+const data = await databaseService.getPasswords();
+setPasswords(data);
 
+}else{
+
+const savedPasswords = localStorage.getItem("passwords");
+
+if(savedPasswords){
+setPasswords(JSON.parse(savedPasswords));
+}
+
+}
+
+};
+
+
+
+/* -----------------------------
+GUARDAR FAVORITOS
+----------------------------- */
 
 useEffect(()=>{
 
@@ -86,15 +109,31 @@ JSON.stringify(favorites)
 
 
 
-const savePassword = () => {
+/* -----------------------------
+GUARDAR CONTRASEÑA
+----------------------------- */
+
+const savePassword = async () => {
 
 if(!site || !username || !password){
+
 setToastMessage("Completa todos los campos");
 setShowToast(true);
 return;
+
 }
 
 const encrypted = encryptPassword(password);
+
+if(isNative){
+
+await databaseService.addPassword(
+site,
+username,
+encrypted
+);
+
+}else{
 
 const newPassword = {
 id: Date.now(),
@@ -103,9 +142,16 @@ username: username,
 password: encrypted
 };
 
-const updated = [...passwords, newPassword];
+const updated = [...passwords,newPassword];
 
-setPasswords(updated);
+localStorage.setItem(
+"passwords",
+JSON.stringify(updated)
+);
+
+}
+
+await loadPasswords();
 
 setSite("");
 setUsername("");
@@ -118,13 +164,30 @@ setShowToast(true);
 
 
 
-const deletePassword = (id:number)=>{
+/* -----------------------------
+ELIMINAR
+----------------------------- */
+
+const deletePassword = async (id:number)=>{
 
 if(!window.confirm("¿Eliminar contraseña?")) return;
 
+if(isNative){
+
+await databaseService.deletePassword(id);
+
+}else{
+
 const updated = passwords.filter(p=>p.id!==id);
 
-setPasswords(updated);
+localStorage.setItem(
+"passwords",
+JSON.stringify(updated)
+);
+
+}
+
+await loadPasswords();
 
 setToastMessage("Contraseña eliminada");
 setShowToast(true);
@@ -132,6 +195,10 @@ setShowToast(true);
 };
 
 
+
+/* -----------------------------
+COPIAR
+----------------------------- */
 
 const copyPassword = async (encrypted:string)=>{
 
@@ -156,6 +223,10 @@ setShowToast(true);
 
 
 
+/* -----------------------------
+FAVORITOS
+----------------------------- */
+
 const toggleFavorite = (id:number)=>{
 
 if(favorites.includes(id)){
@@ -171,6 +242,10 @@ setFavorites([...favorites,id]);
 };
 
 
+
+/* -----------------------------
+MOSTRAR PASSWORD
+----------------------------- */
 
 const toggleVisiblePassword = (id:number)=>{
 
@@ -190,6 +265,10 @@ setVisiblePasswords([...visiblePasswords,id]);
 
 
 
+/* -----------------------------
+BUSCAR
+----------------------------- */
+
 const filteredPasswords = passwords
 .filter((item)=>
 item.title.toLowerCase().includes(search.toLowerCase())
@@ -202,6 +281,7 @@ const bFav = favorites.includes(b.id);
 return Number(bFav) - Number(aFav);
 
 });
+
 
 
 return(

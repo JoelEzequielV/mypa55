@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 
+import { databaseService } from "./services/database";
+
 import { IonApp, setupIonicReact } from "@ionic/react";
 
 import { App as CapacitorApp } from "@capacitor/app";
@@ -34,6 +36,8 @@ const MyApp: React.FC = () => {
   };
 
   useEffect(() => {
+
+    databaseService.initDB();
 
     const resetTimer = () => {
       setLastActivity(Date.now());
