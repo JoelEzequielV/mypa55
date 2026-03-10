@@ -1,10 +1,9 @@
+//main.tsx
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 
-import { defineCustomElements as jeepSqlite } from 'jeep-sqlite/loader';
-
-jeepSqlite(window);
+import { defineCustomElements as jeepSqlite } from 'jeep-sqlite/loader'
 
 import '@ionic/react/css/core.css'
 import '@ionic/react/css/normalize.css'
@@ -17,7 +16,15 @@ import '@ionic/react/css/text-transformation.css'
 import '@ionic/react/css/flex-utils.css'
 import '@ionic/react/css/display.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+/* REGISTRAR WEB COMPONENT SQLITE */
+
+jeepSqlite(window)
+
+const root = ReactDOM.createRoot(
+  document.getElementById('root')!
+)
+
+root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>

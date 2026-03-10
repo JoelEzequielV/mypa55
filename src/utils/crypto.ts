@@ -1,3 +1,4 @@
+//crypto.ts
 import CryptoJS from "crypto-js";
 
 const SECRET_KEY = "mi_clave_super_secreta";

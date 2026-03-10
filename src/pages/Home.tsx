@@ -1,4 +1,6 @@
+//Home.tsx
 import { useState,useEffect } from "react";
+import Settings from "./Settings";
 import "./Home.css";
 
 import {
@@ -32,8 +34,15 @@ import { Clipboard } from "@capacitor/clipboard";
 import { databaseService } from "../services/database";
 
 import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 
-const Home:React.FC = () => {
+
+interface Props{
+    openSettings:()=>void
+    }
+    
+const Home:React.FC<Props> = ({openSettings})=>{
+
 
 const [search,setSearch] = useState("");
 const [showPassword,setShowPassword] = useState(false);
@@ -52,7 +61,6 @@ const [toastMessage,setToastMessage] = useState("");
 const [showToast,setShowToast] = useState(false);
 
 const isNative = Capacitor.isNativePlatform();
-
 
 
 /* -----------------------------
@@ -266,6 +274,20 @@ setVisiblePasswords([...visiblePasswords,id]);
 
 
 /* -----------------------------
+SALIR DE LA APP
+----------------------------- */
+
+const exitApp = () => {
+
+if(isNative){
+CapacitorApp.exitApp();
+}
+
+};
+
+
+
+/* -----------------------------
 BUSCAR
 ----------------------------- */
 
@@ -300,6 +322,9 @@ return(
 
 <IonContent className="ion-padding">
 
+<IonButton onClick={openSettings}>
+Configuración
+</IonButton>
 
 <IonSearchbar
 placeholder="Buscar contraseña..."
@@ -392,6 +417,17 @@ onClick={()=>setShowPasswords(!showPasswords)}
 >
 
 {showPasswords ? "Ocultar contraseñas":"Mostrar contraseñas"}
+
+</IonButton>
+
+
+<IonButton
+color="medium"
+expand="block"
+onClick={exitApp}
+>
+
+Salir de la app
 
 </IonButton>
 
