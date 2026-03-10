@@ -1,4 +1,5 @@
 import { CapacitorSQLite, SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { Capacitor } from '@capacitor/core';
 
 class DatabaseService {
 
@@ -7,6 +8,12 @@ private db: SQLiteDBConnection | null = null;
 async initDB() {
 
 const sqlite = CapacitorSQLite;
+
+if (Capacitor.getPlatform() === "web") {
+
+await sqlite.initWebStore();
+
+}
 
 this.db = await sqlite.createConnection(
 "passwordsDB",
@@ -20,7 +27,7 @@ await this.db.open();
 
 await this.db.execute(`
 CREATE TABLE IF NOT EXISTS passwords (
-id INTEGER PRIMARY KEY NOT NULL,
+id INTEGER PRIMARY KEY AUTOINCREMENT,
 title TEXT,
 username TEXT,
 password TEXT

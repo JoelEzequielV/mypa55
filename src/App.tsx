@@ -6,6 +6,8 @@ import { IonApp, setupIonicReact } from "@ionic/react";
 
 import { App as CapacitorApp } from "@capacitor/app";
 
+import { Capacitor } from "@capacitor/core";
+
 import Home from "./pages/Home";
 import LockScreen from "./pages/LockScreen";
 
@@ -23,47 +25,70 @@ const MyApp: React.FC = () => {
 
   const unlockApp = async () => {
 
+    // Si estamos en web, desbloquear directamente
+    if (Capacitor.getPlatform() === "web") {
+      setLocked(false);
+      return;
+    }
+
     console.log("Intentando desbloquear...");
-  
+
     const verified = await authenticateUser();
-  
-    console.log("Resultado:", verified);
-  
+
+    console.log("Resultado:", verified); //resultado
+
     if (verified) {
       setLocked(false);
     }
-  
+
   };
 
   useEffect(() => {
 
     databaseService.initDB();
-
+  
     const resetTimer = () => {
       setLastActivity(Date.now());
     };
-    
+  
     window.addEventListener("touchstart", resetTimer);
     window.addEventListener("click", resetTimer);
-
-    setInterval(() => {
-
+  
+    const interval = setInterval(() => {
+  
       if (Date.now() - lastActivity > AUTO_LOCK_TIME) {
         setLocked(true);
       }
-    
-    }, 5000);
-
-    unlockApp();
-
-    CapacitorApp.addListener("appStateChange", ({ isActive }) => {
-
+  
+    }, 60000);
+  
+    // En web desbloquear automáticamente
+    if (Capacitor.getPlatform() === "web") {
+      setLocked(false);
+    } else {
+      unlockApp();
+    }
+  
+    const listener = CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+  
       if (!isActive) {
         setLocked(true);
       }
-
+  
     });
-
+  
+    // limpieza al desmontar
+    return () => {
+  
+      window.removeEventListener("touchstart", resetTimer);
+      window.removeEventListener("click", resetTimer);
+  
+      clearInterval(interval);
+  
+      listener.remove();
+  
+    };
+  
   }, []);
 
   return (
