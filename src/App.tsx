@@ -1,137 +1,280 @@
 //App.tsx
 import { useState, useEffect } from "react";
 
-import { databaseService } from "./services/database";
-
 import { IonApp, setupIonicReact } from "@ionic/react";
 
-import { App as CapacitorApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 
-import Settings from "./pages/Settings";
 import Home from "./pages/Home";
 import LockScreen from "./pages/LockScreen";
 import MasterPassword from "./pages/MasterPassword";
+import Settings from "./pages/Settings";
 import SecurityRecovery from "./pages/SecurityRecovery";
 
+import { databaseService } from "./services/database";
 import { authenticateUser } from "./utils/biometric";
-
-const AUTO_LOCK_TIME = 60000;
 
 setupIonicReact();
 
-const MyApp: React.FC = () => {
+const AUTO_LOCK_TIME = 60000;
 
-  const [lastActivity, setLastActivity] = useState(Date.now());
+const App: React.FC = () => {
 
-  const [locked, setLocked] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
+const [loading,setLoading] = useState(true);
 
-  const [recoveryMode,setRecoveryMode] = useState(false);
-  const [settingsMode, setSettingsMode] = useState(false);
+const [locked,setLocked] = useState(true);
 
-  const unlockBiometric = async () => {
+const [authenticated,setAuthenticated] = useState(false);
 
-    if (Capacitor.getPlatform() === "web") {
-      setLocked(false);
-      return;
-    }
+const [hasMasterPassword,setHasMasterPassword] = useState(false);
 
-    const verified = await authenticateUser();
+const [settingsMode,setSettingsMode] = useState(false);
 
-    if (verified) {
-      setLocked(false);
-    }
+const [recoveryMode,setRecoveryMode] = useState(false);
 
-  };
+const [lastActivity,setLastActivity] = useState(Date.now());
 
-  useEffect(() => {
+/* -------------------------
+INIT APP
+------------------------- */
 
-    databaseService.initDB();
+useEffect(()=>{
 
-    const resetTimer = () => {
-      setLastActivity(Date.now());
-    };
+init();
 
-    window.addEventListener("touchstart", resetTimer);
-    window.addEventListener("click", resetTimer);
+},[]);
 
-    const interval = setInterval(() => {
+const init = async ()=>{
 
-      if (Date.now() - lastActivity > AUTO_LOCK_TIME) {
-        setLocked(true);
-        setAuthenticated(false);
-      }
-    
-    }, 1000);
+await databaseService.initDB();
 
-    if (Capacitor.getPlatform() === "web") {
-      setLocked(false);
-    } else {
-      unlockBiometric();
-    }
+const saved = await databaseService.getMasterPassword();
 
-    let listener: any;
+if(saved){
 
-    CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+setHasMasterPassword(true);
 
-      if (!isActive) {
-        setLocked(true);
-        setAuthenticated(false);
-      }
+}else{
 
-    }).then(l => {
-      listener = l;
-    });
+setHasMasterPassword(false);
 
-    return () => {
+setLocked(false);
 
-      window.removeEventListener("touchstart", resetTimer);
-      window.removeEventListener("click", resetTimer);
+}
 
-      clearInterval(interval);
-
-      if (listener) {
-        listener.remove();
-      }
-
-    };
-
-  }, []);
-
-  return (
-
-    <IonApp>
-
-        {locked ? (
-
-        <LockScreen unlock={unlockBiometric} />
-
-        ) : recoveryMode ? (
-
-        <SecurityRecovery goBack={()=>setRecoveryMode(false)} />
-
-        ) : !authenticated ? (
-
-        <MasterPassword
-          unlock={()=>setAuthenticated(true)}
-          forgot={()=>setRecoveryMode(true)}
-        />
-
-        ) : settingsMode ? (
-
-        <Settings goBack={()=>setSettingsMode(false)} />
-
-        ) : (
-
-        <Home openSettings={()=>setSettingsMode(true)} />
-
-        )}
-
-    </IonApp>
-
-  );
+setLoading(false);
 
 };
 
-export default MyApp;
+/* -------------------------
+ACTIVITY LISTENER
+------------------------- */
+
+useEffect(()=>{
+
+const resetTimer = ()=>{
+
+setLastActivity(Date.now());
+
+};
+
+window.addEventListener("click",resetTimer);
+window.addEventListener("touchstart",resetTimer);
+
+const interval = setInterval(()=>{
+
+if(Date.now() - lastActivity > AUTO_LOCK_TIME){
+
+setLocked(true);
+
+setAuthenticated(false);
+
+}
+
+},5000);
+
+let listener:any;
+
+CapacitorApp.addListener("appStateChange",({isActive})=>{
+
+if(!isActive){
+
+setLocked(true);
+
+setAuthenticated(false);
+
+}
+
+}).then(l=>listener=l);
+
+return ()=>{
+
+window.removeEventListener("click",resetTimer);
+window.removeEventListener("touchstart",resetTimer);
+
+clearInterval(interval);
+
+if(listener) listener.remove();
+
+};
+
+},[lastActivity]);
+
+/* -------------------------
+BIOMETRIC
+------------------------- */
+
+const unlockBiometric = async ()=>{
+
+if(Capacitor.getPlatform()==="web"){
+
+setLocked(false);
+
+return;
+
+}
+
+const verified = await authenticateUser();
+
+if(verified){
+
+setLocked(false);
+
+setAuthenticated(true);
+
+}
+
+};
+
+/* -------------------------
+RENDER
+------------------------- */
+
+if(loading){
+
+return (
+
+<IonApp>
+
+<div style={{
+display:"flex",
+height:"100vh",
+alignItems:"center",
+justifyContent:"center"
+}}>
+
+Cargando...
+
+</div>
+
+</IonApp>
+
+);
+
+}
+
+/* CREATE MASTER PASSWORD */
+
+if(!hasMasterPassword){
+
+return(
+
+<IonApp>
+
+<MasterPassword
+unlock={()=>{
+setAuthenticated(true);
+setLocked(false);
+setHasMasterPassword(true);
+}}
+/>
+
+</IonApp>
+
+);
+
+}
+
+/* LOCK SCREEN */
+
+if(locked){
+
+return(
+
+<IonApp>
+
+<LockScreen unlock={unlockBiometric}/>
+
+</IonApp>
+
+);
+
+}
+
+/* RECOVERY */
+
+if(recoveryMode){
+
+return(
+
+<IonApp>
+
+<SecurityRecovery goBack={()=>setRecoveryMode(false)}/>
+
+</IonApp>
+
+);
+
+}
+
+/* MASTER LOGIN */
+
+if(!authenticated){
+
+return(
+
+<IonApp>
+
+<MasterPassword
+unlock={()=>setAuthenticated(true)}
+forgot={()=>setRecoveryMode(true)}
+/>
+
+</IonApp>
+
+);
+
+}
+
+/* SETTINGS */
+
+if(settingsMode){
+
+return(
+
+<IonApp>
+
+<Settings goBack={()=>setSettingsMode(false)}/>
+
+</IonApp>
+
+);
+
+}
+
+/* HOME */
+
+return(
+
+<IonApp>
+
+<Home openSettings={()=>setSettingsMode(true)}/>
+
+</IonApp>
+
+);
+
+};
+
+export default App;

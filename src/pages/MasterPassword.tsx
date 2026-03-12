@@ -1,4 +1,5 @@
 //MasterPassword.tsx
+
 import { useState, useEffect } from "react";
 
 import {
@@ -8,12 +9,21 @@ IonInput,
 IonButton,
 IonText,
 IonSpinner,
-IonProgressBar
+IonProgressBar,
+IonAlert,
+IonIcon,
+IonItem
 } from "@ionic/react";
+
+import { eye, eyeOff, star, starOutline, copy, trash, add } from 'ionicons/icons';
 
 import bcrypt from "bcryptjs";
 
 import { databaseService } from "../services/database";
+
+import { deriveKey, generateSalt } from "../utils/encryption";
+
+import { biometricService } from "../services/biometricService";
 
 interface Props{
 unlock:()=>void
@@ -27,8 +37,17 @@ const [confirm,setConfirm] = useState("");
 const [hasPassword,setHasPassword] = useState(false);
 const [loading,setLoading] = useState(true);
 const [error,setError] = useState("");
-
+const [showPassword,setShowPassword] = useState(false);
 const [strength,setStrength] = useState(0);
+const [strengthText,setStrengthText] = useState("");
+
+const [showAlert,setShowAlert] = useState(false);
+
+const [biometricAvailable,setBiometricAvailable] = useState(false);
+
+/* -------------------------
+INIT
+------------------------- */
 
 useEffect(()=>{
 
@@ -41,6 +60,9 @@ const saved = await databaseService.getMasterPassword();
 if(saved){
 setHasPassword(true);
 }
+
+const bio = await biometricService.isAvailable();
+setBiometricAvailable(bio);
 
 setLoading(false);
 
@@ -58,13 +80,52 @@ const checkStrength = (pass:string)=>{
 
 let score = 0;
 
-if(pass.length > 6) score++;
-if(pass.length > 10) score++;
+if(pass.length >= 8) score++;
+if(pass.length >= 12) score++;
 if(/[A-Z]/.test(pass)) score++;
 if(/[0-9]/.test(pass)) score++;
 if(/[^A-Za-z0-9]/.test(pass)) score++;
 
-setStrength(score/5);
+const level = score/5;
+
+setStrength(level);
+
+if(level <= 0.2) setStrengthText("Muy débil");
+else if(level <= 0.4) setStrengthText("Débil");
+else if(level <= 0.6) setStrengthText("Aceptable");
+else if(level <= 0.8) setStrengthText("Fuerte");
+else setStrengthText("Muy fuerte");
+
+};
+
+/* -------------------------
+VALIDACIÓN
+------------------------- */
+
+const validatePassword = (pass:string)=>{
+
+if(pass.length < 8){
+
+setError("La contraseña debe tener al menos 8 caracteres");
+return false;
+
+}
+
+if(!/[A-Z]/.test(pass)){
+
+setError("Debe contener al menos una letra mayúscula");
+return false;
+
+}
+
+if(!/[0-9]/.test(pass)){
+
+setError("Debe contener al menos un número");
+return false;
+
+}
+
+return true;
 
 };
 
@@ -72,31 +133,34 @@ setStrength(score/5);
 CREAR PASSWORD
 ------------------------- */
 
-const createPassword = async()=>{
+const createPassword = async () => {
 
 setError("");
 
-if(password.length < 6){
-
-setError("La contraseña debe tener al menos 6 caracteres");
-
-return;
-
-}
+if(!validatePassword(password)) return;
 
 if(password !== confirm){
 
 setError("Las contraseñas no coinciden");
-
 return;
 
 }
+
+const salt = generateSalt();
+
+localStorage.setItem("vault_salt",salt);
+
+const key = deriveKey(password,salt);
+
+sessionStorage.setItem("vaultKey",key);
+
+await biometricService.storeKey(key);
 
 const hash = bcrypt.hashSync(password,10);
 
 await databaseService.setMasterPassword(hash);
 
-alert("Contraseña maestra creada");
+setShowAlert(true);
 
 unlock();
 
@@ -106,7 +170,7 @@ unlock();
 VERIFICAR PASSWORD
 ------------------------- */
 
-const verifyPassword = async()=>{
+const verifyPassword = async () => {
 
 setError("");
 
@@ -118,15 +182,64 @@ const match = bcrypt.compareSync(password,saved);
 
 if(match){
 
+const salt = localStorage.getItem("vault_salt");
+
+if(!salt){
+setError("Error de seguridad");
+return;
+}
+
+const key = deriveKey(password,salt);
+
+sessionStorage.setItem("vaultKey",key);
+
+await biometricService.storeKey(key);
+
 unlock();
 
 }else{
+
+sessionStorage.removeItem("vaultKey");
 
 setError("Contraseña incorrecta");
 
 }
 
 };
+
+/* -------------------------
+BIOMETRIC LOGIN
+------------------------- */
+
+const biometricLogin = async()=>{
+
+const auth = await biometricService.authenticate();
+
+if(!auth){
+
+setError("Autenticación fallida");
+return;
+
+}
+
+const key = await biometricService.getKey();
+
+if(!key){
+
+setError("Primero inicia con contraseña");
+return;
+
+}
+
+sessionStorage.setItem("vaultKey",key);
+
+unlock();
+
+};
+
+/* -------------------------
+LOADING
+------------------------- */
 
 if(loading){
 
@@ -146,6 +259,10 @@ return(
 
 }
 
+/* -------------------------
+UI
+------------------------- */
+
 return(
 
 <IonPage>
@@ -160,15 +277,39 @@ return(
 
 </h2>
 
+{error && (
+
+<IonText color="danger">
+
+<p style={{textAlign:"center"}}>{error}</p>
+
+</IonText>
+
+)}
+
+<IonItem>
+
 <IonInput
-type="password"
+type={showPassword ? "text":"password"}
 placeholder="Contraseña"
 value={password}
-onIonChange={e=>{
-setPassword(e.detail.value!)
-checkStrength(e.detail.value!)
+clearOnEdit={false}
+onIonInput={(e:any)=>{
+const value = e.detail.value!;
+setPassword(value);
+checkStrength(value);
 }}
 />
+
+<IonButton
+fill="clear"
+slot="end"
+onClick={()=>setShowPassword(!showPassword)}
+>
+<IonIcon icon={showPassword ? eyeOff : eye}/>
+</IonButton>
+
+</IonItem>
 
 {!hasPassword && (
 
@@ -176,11 +317,16 @@ checkStrength(e.detail.value!)
 
 <IonProgressBar value={strength}></IonProgressBar>
 
+<p style={{textAlign:"center",fontSize:"12px"}}>
+Seguridad: {strengthText}
+</p>
+
 <IonInput
 type="password"
 placeholder="Confirmar contraseña"
 value={confirm}
-onIonChange={e=>setConfirm(e.detail.value!)}
+clearOnEdit={false}
+onIonInput={(e:any)=>setConfirm(e.detail.value!)}
 />
 
 </>
@@ -200,15 +346,19 @@ onClick={hasPassword?verifyPassword:createPassword}
 
 </IonButton>
 
+{biometricAvailable && hasPassword && (
+
 <IonButton
 expand="block"
-color="medium"
-onClick={unlock}
+color="success"
+onClick={biometricLogin}
 >
 
-Usar seguridad del teléfono
+Desbloquear con huella
 
 </IonButton>
+
+)}
 
 {hasPassword && (
 
@@ -224,15 +374,13 @@ Olvidé mi contraseña
 
 )}
 
-{error && (
-
-<IonText color="danger">
-
-<p style={{textAlign:"center"}}>{error}</p>
-
-</IonText>
-
-)}
+<IonAlert
+isOpen={showAlert}
+header="Contraseña creada"
+message="La contraseña maestra se creó correctamente."
+buttons={["OK"]}
+onDidDismiss={()=>setShowAlert(false)}
+/>
 
 </IonContent>
 

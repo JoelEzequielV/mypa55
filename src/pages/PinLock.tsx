@@ -39,7 +39,8 @@ const PinLock:React.FC<Props> = ({unlock}) => {
  type="password"
  placeholder="PIN"
  value={pin}
- onIonChange={(e)=>setPin(e.detail.value!)}
+ clearOnEdit={false}
+ onIonInput={(e:any)=>setPin(e.detail.value!)}
 />
 
 <IonButton expand="block" onClick={checkPin}>

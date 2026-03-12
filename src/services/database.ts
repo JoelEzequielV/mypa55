@@ -1,254 +1,272 @@
-//database.ts
+//src/services/database.ts
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { Capacitor } from "@capacitor/core";
+import { encryptPassword, decryptPassword } from "../utils/encryption";
 
 class DatabaseService {
 
-  private sqlite: SQLiteConnection;
-  private db: SQLiteDBConnection | null = null;
+private sqlite: SQLiteConnection;
+private db: SQLiteDBConnection | null = null;
 
-  constructor() {
-    this.sqlite = new SQLiteConnection(CapacitorSQLite);
-  }
+constructor(){
+this.sqlite = new SQLiteConnection(CapacitorSQLite);
+}
 
-  async initDB() {
+async initDB(){
 
-    if (Capacitor.getPlatform() === "web") {
-      return;
-    }
+if(Capacitor.getPlatform()==="web") return;
 
-    if (this.db) return;
+if(this.db) return;
 
-    this.db = await this.sqlite.createConnection(
-      "passwordsDB",
-      false,
-      "no-encryption",
-      1,
-      false
-    );
+this.db = await this.sqlite.createConnection(
+"passwordsDB",
+false,
+"no-encryption",
+1,
+false
+);
 
-    await this.db.open();
+await this.db.open();
 
-    await this.db.execute(`
-      CREATE TABLE IF NOT EXISTS passwords (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        username TEXT,
-        password TEXT
-      );
-    `);
+await this.db.execute(`
+CREATE TABLE IF NOT EXISTS passwords (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+title TEXT,
+username TEXT,
+password TEXT
+);
+`);
 
-    await this.db.execute(`
-      CREATE TABLE IF NOT EXISTS settings (
-        id INTEGER PRIMARY KEY,
-        use_master_password INTEGER,
-        master_password TEXT,
-        security_question TEXT,
-        security_answer TEXT
-      );
-    `);
+await this.db.execute(`
+CREATE TABLE IF NOT EXISTS settings (
+id INTEGER PRIMARY KEY,
+master_password TEXT,
+security_question TEXT,
+security_answer TEXT
+);
+`);
 
-  }
+}
 
-  /* -----------------------------
-  MASTER PASSWORD
-  ----------------------------- */
+/* -----------------------------
+MASTER PASSWORD
+----------------------------- */
 
-  async setMasterPassword(hash: string) {
+async setMasterPassword(hash:string){
 
-    if (Capacitor.getPlatform() === "web") {
+if(Capacitor.getPlatform()==="web"){
 
-      localStorage.setItem("master_password", hash);
-      localStorage.setItem("use_master_password", "true");
+localStorage.setItem("master_password",hash);
+return;
 
-      return;
-    }
+}
 
-    if (!this.db) return;
+if(!this.db) return;
 
-    await this.db.run(
-      `INSERT OR REPLACE INTO settings
-      (id,use_master_password,master_password)
-      VALUES (1,1,?)`,
-      [hash]
-    );
+await this.db.run(`
+INSERT OR REPLACE INTO settings
+(id, master_password)
+VALUES (1, ?)
+`,[hash]);
 
-  }
+}
 
-  async getMasterPassword() {
+async getMasterPassword(){
 
-    if (Capacitor.getPlatform() === "web") {
-      return localStorage.getItem("master_password");
-    }
+if(Capacitor.getPlatform()==="web"){
 
-    if (!this.db) return null;
+return localStorage.getItem("master_password");
 
-    const result = await this.db.query(
-      `SELECT master_password FROM settings WHERE id = 1`
-    );
+}
 
-    return result.values?.[0]?.master_password || null;
+if(!this.db) return null;
 
-  }
+const result = await this.db.query(`
+SELECT master_password FROM settings WHERE id=1
+`);
 
-  async useMasterPassword() {
+if(result.values?.length){
 
-    if (Capacitor.getPlatform() === "web") {
+return result.values[0].master_password;
 
-      return localStorage.getItem("use_master_password") === "true";
+}
 
-    }
+return null;
 
-    if (!this.db) return false;
+}
 
-    const result = await this.db.query(
-      `SELECT use_master_password FROM settings WHERE id=1`
-    );
+/* -----------------------------
+SECURITY QUESTION
+----------------------------- */
 
-    return result.values?.[0]?.use_master_password === 1;
+async setSecurityQuestion(question:string,answer:string){
 
-  }
+if(Capacitor.getPlatform()==="web"){
 
-  async disableMasterPassword() {
+localStorage.setItem("security_question",question);
+localStorage.setItem("security_answer",answer);
 
-    if (Capacitor.getPlatform() === "web") {
+return;
 
-      localStorage.setItem("use_master_password","false");
+}
 
-      return;
-    }
+if(!this.db) return;
 
-    if (!this.db) return;
+await this.db.run(`
+INSERT OR REPLACE INTO settings
+(id, security_question, security_answer)
+VALUES (1, ?, ?)
+`,[question,answer]);
 
-    await this.db.run(
-      `UPDATE settings SET use_master_password=0 WHERE id=1`
-    );
+}
 
-  }
+async getSecurityQuestion(){
 
-  /* -----------------------------
-  SECURITY QUESTION
-  ----------------------------- */
+if(Capacitor.getPlatform()==="web"){
 
-  async setSecurityQuestion(question:string, answer:string){
+return {
+question: localStorage.getItem("security_question"),
+answer: localStorage.getItem("security_answer")
+};
 
-    if (Capacitor.getPlatform() === "web"){
+}
 
-      localStorage.setItem("security_question",question);
-      localStorage.setItem("security_answer",answer);
+if(!this.db) return null;
 
-      return;
-    }
+const result = await this.db.query(`
+SELECT security_question, security_answer
+FROM settings WHERE id=1
+`);
 
-    if (!this.db) return;
+if(result.values?.length){
 
-    await this.db.run(
-      `UPDATE settings
-       SET security_question=?, security_answer=?
-       WHERE id=1`,
-       [question,answer]
-    );
+return result.values[0];
 
-  }
+}
 
-  async getSecurityQuestion(){
+return null;
 
-    if (Capacitor.getPlatform() === "web"){
-      return localStorage.getItem("security_question");
-    }
+}
 
-    if (!this.db) return null;
+/* -----------------------------
+DISABLE MASTER PASSWORD
+----------------------------- */
 
-    const result = await this.db.query(
-      `SELECT security_question FROM settings WHERE id=1`
-    );
+async disableMasterPassword(){
 
-    return result.values?.[0]?.security_question || null;
+if(Capacitor.getPlatform()==="web"){
 
-  }
+localStorage.removeItem("master_password");
 
-  async verifySecurityAnswer(answer:string){
+return;
 
-    if (Capacitor.getPlatform() === "web"){
+}
 
-      const saved = localStorage.getItem("security_answer");
+if(!this.db) return;
 
-      return saved === answer;
+await this.db.run(`
+UPDATE settings
+SET master_password=NULL
+WHERE id=1
+`);
 
-    }
+}
 
-    if (!this.db) return false;
+/* -----------------------------
+PASSWORDS
+----------------------------- */
 
-    const result = await this.db.query(
-      `SELECT security_answer FROM settings WHERE id=1`
-    );
+async addPassword(title:string,username:string,password:string,key:string){
 
-    return result.values?.[0]?.security_answer === answer;
+if(Capacitor.getPlatform()==="web"){
 
-  }
+const encrypted = encryptPassword(password,key);
 
-  /* -----------------------------
-  RESET APP
-  ----------------------------- */
+const data = JSON.parse(localStorage.getItem("passwords") || "[]");
 
-  async resetApp(){
+data.push({
+id:Date.now(),
+title,
+username,
+password:encrypted
+});
 
-    if (Capacitor.getPlatform() === "web"){
+localStorage.setItem("passwords",JSON.stringify(data));
 
-      localStorage.clear();
+return;
 
-      return;
+}
 
-    }
+if(!this.db) return;
 
-    if (!this.db) return;
+const encrypted = encryptPassword(password,key);
 
-    await this.db.execute(`DELETE FROM passwords`);
-    await this.db.execute(`DELETE FROM settings`);
+await this.db.run(
+`INSERT INTO passwords (title,username,password) VALUES (?,?,?)`,
+[title,username,encrypted]
+);
 
-  }
+}
 
-  /* -----------------------------
-  PASSWORDS
-  ----------------------------- */
+async getPasswords(key:string){
 
-  async addPassword(title: string, username: string, password: string) {
+if(Capacitor.getPlatform()==="web"){
 
-    if (Capacitor.getPlatform() === "web") return;
+const data = JSON.parse(localStorage.getItem("passwords") || "[]");
 
-    if (!this.db) return;
+return data.map((p:any)=>{
 
-    await this.db.run(
-      `INSERT INTO passwords (title,username,password) VALUES (?,?,?)`,
-      [title, username, password]
-    );
+try{
+p.password = decryptPassword(p.password,key);
+}catch{
+p.password = "ERROR";
+}
 
-  }
+return p;
 
-  async getPasswords() {
+});
 
-    if (Capacitor.getPlatform() === "web") return [];
+}
 
-    if (!this.db) return [];
+if(!this.db) return [];
 
-    const result = await this.db.query(`SELECT * FROM passwords`);
+const result = await this.db.query(`SELECT * FROM passwords`);
 
-    return result.values || [];
+const passwords = result.values || [];
 
-  }
+return passwords.map((p:any)=>{
 
-  async deletePassword(id: number) {
+try{
+p.password = decryptPassword(p.password,key);
+}catch{
+p.password = "ERROR";
+}
 
-    if (Capacitor.getPlatform() === "web") return;
+return p;
 
-    if (!this.db) return;
+});
 
-    await this.db.run(
-      `DELETE FROM passwords WHERE id=?`,
-      [id]
-    );
+}
 
-  }
+async deletePassword(id:number){
+
+if(Capacitor.getPlatform()==="web"){
+
+const data = JSON.parse(localStorage.getItem("passwords") || "[]");
+
+const filtered = data.filter((p:any)=>p.id !== id);
+
+localStorage.setItem("passwords",JSON.stringify(filtered));
+
+return;
+
+}
+
+if(!this.db) return;
+
+await this.db.run(`DELETE FROM passwords WHERE id=?`,[id]);
+
+}
 
 }
 

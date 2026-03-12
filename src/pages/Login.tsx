@@ -62,7 +62,8 @@ const Login: React.FC<Props> = ({goRegister,goHome}) => {
           <IonInput
             placeholder="Email"
             value={email}
-            onIonChange={(e)=>setEmail(e.detail.value!)}
+            clearOnEdit={false}
+            onIonInput={(e:any)=>setEmail(e.detail.value!)}
           />
         </IonItem>
 
@@ -72,7 +73,8 @@ const Login: React.FC<Props> = ({goRegister,goHome}) => {
             type={showPassword ? "text" : "password"}
             placeholder="Contraseña"
             value={password}
-            onIonChange={(e)=>setPassword(e.detail.value!)}
+            clearOnEdit={false}
+            onIonInput={(e:any)=>setPassword(e.detail.value!)}
           />
 
           <IonButton

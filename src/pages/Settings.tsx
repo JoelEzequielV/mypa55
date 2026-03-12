@@ -1,28 +1,35 @@
-//Settings.tsx
+//src/pages/Settings.tsx
 import { useState } from "react";
-
+import "./Home.css";
 import {
 IonPage,
 IonContent,
 IonInput,
 IonButton,
 IonText,
-IonProgressBar
+IonProgressBar,
+IonIcon,
+IonItem,
+IonCard
 } from "@ionic/react";
+
+import { eye, eyeOff } from 'ionicons/icons';
 
 import bcrypt from "bcryptjs";
 
 import { databaseService } from "../services/database";
+
+import {
+previewEncryptedBackup,
+exportEncryptedBackup,
+importEncryptedBackup
+} from "../utils/backup";
 
 interface Props{
 goBack:()=>void
 }
 
 const Settings:React.FC<Props> = ({goBack})=>{
-
-/* -------------------------
-STATE
-------------------------- */
 
 const [newPassword,setNewPassword] = useState("");
 const [confirm,setConfirm] = useState("");
@@ -35,9 +42,13 @@ const [error,setError] = useState("");
 
 const [strength,setStrength] = useState(0);
 
-/* -------------------------
-PASSWORD STRENGTH
-------------------------- */
+const [backupKey,setBackupKey] = useState("");
+const [showPassword,setShowPassword] = useState(false);
+const [showPassword2,setShowPassword2] = useState(false);
+
+const [importPassword,setImportPassword] = useState("");
+const [preview,setPreview] = useState<any>(null);
+const [importProgress,setImportProgress] = useState(0);
 
 const checkStrength = (pass:string)=>{
 
@@ -53,15 +64,11 @@ setStrength(score/5);
 
 };
 
-/* -------------------------
-VALIDATE MASTER PASSWORD
-------------------------- */
-
 const validatePassword = ()=>{
 
-if(newPassword.length < 6){
+if(newPassword.length < 8){
 
-setError("La contraseña debe tener al menos 6 caracteres");
+setError("La contraseña debe tener al menos 8 caracteres");
 return false;
 
 }
@@ -91,10 +98,6 @@ return true;
 
 };
 
-/* -------------------------
-CHANGE MASTER PASSWORD
-------------------------- */
-
 const changeMasterPassword = async()=>{
 
 setError("");
@@ -108,16 +111,12 @@ const hash = bcrypt.hashSync(newPassword,10);
 
 await databaseService.setMasterPassword(hash);
 
-setMsg("Contraseña maestra actualizada correctamente");
+setMsg("Contraseña maestra actualizada");
 
 setNewPassword("");
 setConfirm("");
 
 };
-
-/* -------------------------
-VALIDATE SECURITY QUESTION
-------------------------- */
 
 const validateSecurity = ()=>{
 
@@ -149,10 +148,6 @@ return true;
 
 };
 
-/* -------------------------
-SAVE SECURITY QUESTION
-------------------------- */
-
 const saveSecurityQuestion = async()=>{
 
 setError("");
@@ -164,31 +159,112 @@ if(!valid) return;
 
 await databaseService.setSecurityQuestion(question,answer);
 
-setMsg("Pregunta de seguridad guardada");
+setMsg("Pregunta guardada");
 
 setQuestion("");
 setAnswer("");
 
 };
 
-/* -------------------------
-DISABLE MASTER PASSWORD
-------------------------- */
+/* -----------------------------
+EXPORT BACKUP
+----------------------------- */
 
-const disableMasterPassword = async()=>{
+const exportBackup = async()=>{
 
 setError("");
 setMsg("");
 
-await databaseService.disableMasterPassword();
+if(!backupKey){
 
-setMsg("Contraseña maestra desactivada");
+setError("Debes escribir una clave para cifrar el backup");
+return;
+
+}
+
+try{
+
+const filename = await exportEncryptedBackup(backupKey);
+
+setMsg(`Backup exportado como ${filename}. 
+Se guardó en la carpeta Descargas. 
+Guarda también la clave usada.`);
+
+}catch(e:any){
+
+setError(e.message || "Error al exportar");
+
+}
 
 };
 
-/* -------------------------
-UI
-------------------------- */
+/* -----------------------------
+IMPORT BACKUP
+----------------------------- */
+
+const importBackup = async(e:any)=>{
+
+setError("");
+setMsg("");
+
+const file = e.target.files[0];
+
+if(!file){
+setError("Debes seleccionar un archivo");
+return;
+}
+
+if(!importPassword){
+setError("Debes escribir la contraseña del backup");
+return;
+}
+
+try{
+
+const result = await previewEncryptedBackup(file,importPassword);
+
+setPreview(result);
+
+}catch(e:any){
+
+setError(e.message || "No se pudo leer el backup");
+
+}
+
+};
+
+/* -----------------------------
+RESTORE BACKUP
+----------------------------- */
+const restoreBackup = async()=>{
+
+if(!preview){
+setError("Primero selecciona un backup válido");
+return;
+}
+
+setImportProgress(0);
+
+try{
+
+const total = await importEncryptedBackup(
+preview.data,
+(p)=>setImportProgress(p)
+);
+
+setMsg(`Backup restaurado correctamente.
+${total} contraseñas importadas.`);
+
+setPreview(null);
+
+}catch(e:any){
+
+setError(e.message || "Error al restaurar");
+
+}
+
+};
+
 
 return(
 
@@ -196,103 +272,173 @@ return(
 
 <IonContent className="ion-padding">
 
-<h2 style={{textAlign:"center"}}>Configuración de seguridad</h2>
-
-{/* -------------------------
-MESSAGES
-------------------------- */}
+<h2 style={{textAlign:"center"}}>Configuración</h2>
 
 {error && (
-
 <IonText color="danger">
 <p style={{textAlign:"center"}}>{error}</p>
 </IonText>
-
 )}
 
 {msg && (
-
 <IonText color="success">
 <p style={{textAlign:"center"}}>{msg}</p>
 </IonText>
-
 )}
 
-{/* -------------------------
-MASTER PASSWORD
-------------------------- */}
+
+<IonCard color="light" style={{padding:"10px", border:"1px solid lightgray"}}>
 
 <h3>Cambiar contraseña maestra</h3>
+<IonItem >
 
 <IonInput
-type="password"
+type={showPassword ? "text":"password"}
 placeholder="Nueva contraseña"
 value={newPassword}
-onIonChange={e=>{
+clearOnEdit={false}
+onIonInput={(e:any)=>{
 setNewPassword(e.detail.value!)
 checkStrength(e.detail.value!)
 }}
 />
+<IonButton
+fill="clear"
+slot="end"
+onClick={()=>setShowPassword(!showPassword)}
+>
+<IonIcon icon={showPassword ? eyeOff : eye}/>
+</IonButton>
 
+</IonItem>
 <IonProgressBar value={strength}></IonProgressBar>
 
+
+<IonItem>
 <IonInput
-type="password"
+type={showPassword2 ? "text":"password"}
 placeholder="Confirmar contraseña"
 value={confirm}
-onIonChange={e=>setConfirm(e.detail.value!)}
+clearOnEdit={false}
+onIonInput={(e:any)=>setConfirm(e.detail.value!)}
 />
-
+<IonButton
+fill="clear"
+slot="end"
+onClick={()=>setShowPassword2(!showPassword2)}
+>
+<IonIcon icon={showPassword2 ? eyeOff : eye}/>
+</IonButton>
+</IonItem>
 <br/>
 
 <IonButton expand="block" onClick={changeMasterPassword}>
 Actualizar contraseña maestra
 </IonButton>
 
-{/* -------------------------
-SECURITY QUESTION
-------------------------- */}
-
+</IonCard>
 <br/>
 
+<IonCard color="light" style={{padding:"10px", border:"1px solid lightgray"}}>
 <h3>Pregunta de recuperación</h3>
 
 <IonInput
-placeholder="Escribe tu pregunta de seguridad"
+placeholder="Pregunta de seguridad"
 value={question}
-onIonChange={e=>setQuestion(e.detail.value!)}
+clearOnEdit={false}
+onIonInput={(e:any)=>setQuestion(e.detail.value!)}
 />
 
 <IonInput
 placeholder="Respuesta"
 value={answer}
-onIonChange={e=>setAnswer(e.detail.value!)}
+clearOnEdit={false}
+onIonInput={(e:any)=>setAnswer(e.detail.value!)}
 />
 
 <br/>
 
 <IonButton expand="block" onClick={saveSecurityQuestion}>
-Guardar pregunta de seguridad
+Guardar pregunta
 </IonButton>
 
-{/* -------------------------
-DISABLE MASTER PASSWORD
-------------------------- */}
+</IonCard>
+<br/>
+
+<IonCard color="light" style={{padding:"10px", border:"1px solid lightgray"}}>
+<h3>Backup cifrado</h3>
+
+<p style={{fontSize:"13px",color:"#666"}}>
+El backup se guardará como un archivo cifrado.
+Necesitarás esta contraseña para restaurarlo más adelante.
+</p>
+<IonItem>
+<IonInput
+type="password"
+placeholder="contraseña para el backup"
+value={backupKey}
+clearOnEdit={false}
+onIonInput={(e:any)=>setBackupKey(e.detail.value!)}
+/>
+</IonItem>
+<br/>
+
+<IonButton expand="block" onClick={exportBackup}>
+Exportar backup
+</IonButton>
+</IonCard>
+<br/>
+<IonCard color="light" style={{padding:"10px", border:"1px solid lightgray"}}>
+<p style={{fontSize:"13px",color:"#666"}}>
+Primero ingresa contraseña del backup luego importa el .vault</p>
+<IonItem>
+<IonInput
+type="password"
+placeholder="contraseña del backup"
+value={importPassword}
+onIonInput={(e:any)=>setImportPassword(e.detail.value!)}
+/>
+</IonItem>
 
 <br/>
 
+<IonButton expand="block">
+Seleccionar archivo backup
+<input
+type="file"
+accept=".vault"
+onChange={importBackup}
+style={{
+opacity:0,
+position:"absolute",
+width:"100%",
+height:"100%"
+}}
+/>
+</IonButton>
+{preview && (
+
+<IonCard style={{padding:"10px"}}>
+
+<p>
+Backup detectado con <b>{preview.count}</b> contraseñas
+</p>
+
 <IonButton
 expand="block"
-color="warning"
-onClick={disableMasterPassword}
+color="success"
+onClick={restoreBackup}
 >
-Desactivar contraseña maestra
+Restaurar backup
 </IonButton>
 
-{/* -------------------------
-BACK BUTTON
-------------------------- */}
+<IonProgressBar value={importProgress}></IonProgressBar>
 
+</IonCard>
+
+)}
+
+</IonCard>
 <br/>
 
 <IonButton
@@ -302,8 +448,7 @@ onClick={goBack}
 >
 Volver al inicio
 </IonButton>
-
-
+<br /><br /><br />
 </IonContent>
 
 </IonPage>

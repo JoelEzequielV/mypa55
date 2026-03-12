@@ -6,10 +6,14 @@ IonPage,
 IonContent,
 IonInput,
 IonButton,
-IonText
+IonText,
+IonSpinner,
+IonProgressBar
 } from "@ionic/react";
 
 import bcrypt from "bcryptjs";
+
+import { checkPasswordStrength, validateMasterPassword } from "../utils/passwordStrength";
 
 import { databaseService } from "../services/database";
 
@@ -20,49 +24,84 @@ goBack:()=>void
 const SecurityRecovery:React.FC<Props> = ({goBack})=>{
 
 const [question,setQuestion] = useState("");
+const [savedAnswer,setSavedAnswer] = useState("");
+
 const [answer,setAnswer] = useState("");
+
 const [newPassword,setNewPassword] = useState("");
 const [confirm,setConfirm] = useState("");
+
 const [verified,setVerified] = useState(false);
+
+const [loading,setLoading] = useState(true);
 const [error,setError] = useState("");
+const [msg,setMsg] = useState("");
+
+const [strength,setStrength] = useState(0);
+const [strengthText,setStrengthText] = useState("");
+
+/* -------------------------
+INIT
+------------------------- */
 
 useEffect(()=>{
 
-const loadQuestion = async()=>{
+const init = async()=>{
 
-const q = await databaseService.getSecurityQuestion();
+const data = await databaseService.getSecurityQuestion();
 
-if(q){
-setQuestion(q);
+if(data){
+
+setQuestion(data.security_question || data.question || "");
+setSavedAnswer(data.security_answer || data.answer || "");
+
 }
+
+setLoading(false);
 
 };
 
-loadQuestion();
+init();
 
 },[]);
 
-/* ------------------
-VERIFICAR RESPUESTA
------------------- */
+/* -------------------------
+VERIFY ANSWER
+------------------------- */
 
-const verifyAnswer = async()=>{
+const verifyAnswer = ()=>{
 
-const ok = await databaseService.verifySecurityAnswer(answer);
+setError("");
 
-if(ok){
+if(answer.trim().toLowerCase() === savedAnswer?.toLowerCase()){
+
 setVerified(true);
+
 }else{
+
 setError("Respuesta incorrecta");
+
 }
 
 };
 
-/* ------------------
-CAMBIAR PASSWORD
------------------- */
+/* -------------------------
+RESET PASSWORD
+------------------------- */
 
-const changePassword = async()=>{
+const resetPassword = async()=>{
+
+setError("");
+setMsg("");
+
+const validation = validateMasterPassword(newPassword);
+
+if(validation){
+
+setError(validation);
+return;
+
+}
 
 if(newPassword !== confirm){
 
@@ -75,29 +114,18 @@ const hash = bcrypt.hashSync(newPassword,10);
 
 await databaseService.setMasterPassword(hash);
 
-alert("Contraseña cambiada");
+setMsg("Contraseña actualizada correctamente");
 
-goBack();
-
-};
-
-/* ------------------
-RESET APP
------------------- */
-
-const resetApp = async()=>{
-
-const confirmReset = window.confirm(
-"Esto borrará todas las contraseñas. ¿Continuar?"
-);
-
-if(!confirmReset) return;
-
-await databaseService.resetApp();
-
-window.location.reload();
+setNewPassword("");
+setConfirm("");
 
 };
+
+/* -------------------------
+LOADING
+------------------------- */
+
+if(loading){
 
 return(
 
@@ -105,18 +133,63 @@ return(
 
 <IonContent className="ion-padding">
 
-<h2>Recuperar acceso</h2>
+<IonSpinner/>
 
-{!verified ? (
+</IonContent>
+
+</IonPage>
+
+);
+
+}
+
+/* -------------------------
+UI
+------------------------- */
+
+return(
+
+<IonPage>
+
+<IonContent className="ion-padding">
+
+<h2 style={{textAlign:"center"}}>
+
+Recuperar contraseña
+
+</h2>
+
+{error && (
+
+<IonText color="danger">
+<p style={{textAlign:"center"}}>{error}</p>
+</IonText>
+
+)}
+
+{msg && (
+
+<IonText color="success">
+<p style={{textAlign:"center"}}>{msg}</p>
+</IonText>
+
+)}
+
+{/* PREGUNTA */}
+
+{!verified && (
 
 <>
 
-<p>{question || "No hay pregunta configurada"}</p>
+<p style={{textAlign:"center"}}>
+{question || "No hay pregunta de seguridad configurada"}
+</p>
 
 <IonInput
 placeholder="Respuesta"
 value={answer}
-onIonChange={e=>setAnswer(e.detail.value!)}
+clearOnEdit={false}
+onIonInput={(e:any)=>setAnswer(e.detail.value!)}
 />
 
 <br/>
@@ -127,7 +200,11 @@ Verificar respuesta
 
 </>
 
-) : (
+)}
+
+{/* NUEVA CONTRASEÑA */}
+
+{verified && (
 
 <>
 
@@ -137,20 +214,36 @@ Verificar respuesta
 type="password"
 placeholder="Nueva contraseña"
 value={newPassword}
-onIonChange={e=>setNewPassword(e.detail.value!)}
+clearOnEdit={false}
+onIonInput={(e:any)=>{
+const value = e.detail.value!;
+setNewPassword(value);
+
+const result = checkPasswordStrength(value);
+
+setStrength(result.level);
+setStrengthText(result.text);
+}}
 />
+
+<IonProgressBar value={strength}></IonProgressBar>
+
+<p style={{textAlign:"center",fontSize:"12px"}}>
+Seguridad: {strengthText}
+</p>
 
 <IonInput
 type="password"
-placeholder="Confirmar"
+placeholder="Confirmar contraseña"
 value={confirm}
-onIonChange={e=>setConfirm(e.detail.value!)}
+clearOnEdit={false}
+onIonInput={(e:any)=>setConfirm(e.detail.value!)}
 />
 
 <br/>
 
-<IonButton expand="block" onClick={changePassword}>
-Guardar nueva contraseña
+<IonButton expand="block" onClick={resetPassword}>
+Actualizar contraseña
 </IonButton>
 
 </>
@@ -159,21 +252,9 @@ Guardar nueva contraseña
 
 <br/>
 
-<IonButton expand="block" color="danger" onClick={resetApp}>
-Resetear aplicación
-</IonButton>
-
 <IonButton expand="block" color="medium" onClick={goBack}>
 Volver
 </IonButton>
-
-{error && (
-
-<IonText color="danger">
-<p>{error}</p>
-</IonText>
-
-)}
 
 </IonContent>
 

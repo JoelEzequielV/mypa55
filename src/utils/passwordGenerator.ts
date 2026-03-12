@@ -1,15 +1,33 @@
-export const generatePassword = (length = 12) => {
-
-    const chars =
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*";
+//passwordGenerator.ts
+export const generatePassword = (
+  length=16,
+  useUpper=true,
+  useLower=true,
+  useNumbers=true,
+  useSymbols=true
+  )=>{
   
-    let password = "";
+  let chars="";
   
-    for(let i=0;i<length;i++){
-      password += chars.charAt(
-        Math.floor(Math.random()*chars.length)
-      );
-    }
+  if(useLower) chars+="abcdefghijklmnopqrstuvwxyz";
+  if(useUpper) chars+="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  if(useNumbers) chars+="0123456789";
+  if(useSymbols) chars+="!@#$%&*()_+-=";
   
-    return password;
+  if(chars.length===0){
+  chars="abcdefghijklmnopqrstuvwxyz";
+  }
+  
+  let password="";
+  
+  for(let i=0;i<length;i++){
+  
+  password += chars.charAt(
+  Math.floor(Math.random()*chars.length)
+  );
+  
+  }
+  
+  return password;
+  
   };

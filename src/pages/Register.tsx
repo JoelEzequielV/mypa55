@@ -75,7 +75,8 @@ const Register: React.FC<Props> = ({goLogin}) => {
           <IonInput
             placeholder="Nombre"
             value={name}
-            onIonChange={(e)=>setName(e.detail.value!)}
+            clearOnEdit={false}
+            onIonInput={(e:any)=>setName(e.detail.value!)}
           />
         </IonItem>
 
@@ -84,7 +85,8 @@ const Register: React.FC<Props> = ({goLogin}) => {
             type="email"
             placeholder="Email"
             value={email}
-            onIonChange={(e)=>setEmail(e.detail.value!)}
+            clearOnEdit={false}
+            onIonInput={(e:any)=>setEmail(e.detail.value!)}
           />
         </IonItem>
 
@@ -94,7 +96,8 @@ const Register: React.FC<Props> = ({goLogin}) => {
             type={showPassword ? "text" : "password"}
             placeholder="Contraseña"
             value={password}
-            onIonChange={(e)=>setPassword(e.detail.value!)}
+            clearOnEdit={false}
+            onIonInput={(e:any)=>setPassword(e.detail.value!)}
           />
 
           <IonButton
