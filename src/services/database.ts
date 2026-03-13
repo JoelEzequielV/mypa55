@@ -2,6 +2,7 @@
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { Capacitor } from "@capacitor/core";
 import { encryptPassword, decryptPassword } from "../utils/encryption";
+import { scheduleAutoBackup } from "./autoBackup";
 
 class DatabaseService {
 
@@ -206,7 +207,73 @@ await this.db.run(
 [title,username,encrypted]
 );
 
+/* AUTO BACKUP */
+
+const backupKey = localStorage.getItem("backup_key");
+
+if(backupKey){
+scheduleAutoBackup(backupKey);
 }
+
+}
+
+/* -----------------------------
+UPDATE PASSWORDS
+----------------------------- */
+
+async updatePassword(id:number,title:string,username:string,password:string,key:string){
+
+if(Capacitor.getPlatform()==="web"){
+
+const data = JSON.parse(localStorage.getItem("passwords") || "[]");
+
+const encrypted = encryptPassword(password,key);
+
+const updated = data.map((p:any)=>{
+
+if(p.id===id){
+
+return {
+...p,
+title,
+username,
+password:encrypted
+}
+
+}
+
+return p
+
+})
+
+localStorage.setItem("passwords",JSON.stringify(updated));
+
+return;
+
+}
+
+if(!this.db) return;
+
+const encrypted = encryptPassword(password,key);
+
+await this.db.run(
+`UPDATE passwords SET title=?, username=?, password=? WHERE id=?`,
+[title,username,encrypted,id]
+)
+
+/* AUTO BACKUP */
+
+const backupKey = localStorage.getItem("backup_key");
+
+if(backupKey){
+scheduleAutoBackup(backupKey);
+}
+
+}
+
+/* -----------------------------
+GET PASSWORDS
+----------------------------- */
 
 async getPasswords(key:string){
 
@@ -265,6 +332,14 @@ return;
 if(!this.db) return;
 
 await this.db.run(`DELETE FROM passwords WHERE id=?`,[id]);
+
+/* AUTO BACKUP */
+
+const backupKey = localStorage.getItem("backup_key");
+
+if(backupKey){
+scheduleAutoBackup(backupKey);
+}
 
 }
 

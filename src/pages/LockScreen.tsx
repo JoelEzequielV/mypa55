@@ -1,3 +1,4 @@
+//src/pages/LockScreen.tsx
 import {
   IonPage,
   IonContent,
@@ -16,7 +17,7 @@ const LockScreen: React.FC<Props> = ({ unlock }) => {
     <IonPage>
 
       <IonContent className="ion-padding ion-text-center">
-
+        <br /><br />
         <h2>🔒 App bloqueada</h2>
 
         <IonButton expand="block" onClick={unlock}>

@@ -5,6 +5,7 @@ import { IonApp, setupIonicReact } from "@ionic/react";
 
 import { Capacitor } from "@capacitor/core";
 import { App as CapacitorApp } from "@capacitor/app";
+import { runDailyBackup } from "./services/backupScheduler";
 
 import Home from "./pages/Home";
 import LockScreen from "./pages/LockScreen";
@@ -14,6 +15,13 @@ import SecurityRecovery from "./pages/SecurityRecovery";
 
 import { databaseService } from "./services/database";
 import { authenticateUser } from "./utils/biometric";
+
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+
+import { tryAutoRestore } from "./services/autoRestore";
+
+
+GoogleAuth.initialize();
 
 setupIonicReact();
 
@@ -42,7 +50,8 @@ INIT APP
 useEffect(()=>{
 
 init();
-
+runDailyBackup();
+tryAutoRestore();
 },[]);
 
 const init = async ()=>{
@@ -99,6 +108,8 @@ let listener:any;
 CapacitorApp.addListener("appStateChange",({isActive})=>{
 
 if(!isActive){
+
+sessionStorage.removeItem("vaultKey");
 
 setLocked(true);
 

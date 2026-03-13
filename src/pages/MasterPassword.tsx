@@ -1,7 +1,8 @@
 //MasterPassword.tsx
 
 import { useState, useEffect } from "react";
-
+import { backupExistsOnDrive, restoreBackupFromDrive } from "../services/gdriveBackup";
+import HelpModal from "../components/HelpModal";
 import {
 IonPage,
 IonContent,
@@ -40,9 +41,9 @@ const [error,setError] = useState("");
 const [showPassword,setShowPassword] = useState(false);
 const [strength,setStrength] = useState(0);
 const [strengthText,setStrengthText] = useState("");
-
+const [showRestore,setShowRestore] = useState(false);
 const [showAlert,setShowAlert] = useState(false);
-
+const [showHelp,setShowHelp] = useState(false);
 const [biometricAvailable,setBiometricAvailable] = useState(false);
 
 /* -------------------------
@@ -174,6 +175,19 @@ const verifyPassword = async () => {
 
 setError("");
 
+/* LIMITADOR DE INTENTOS */
+
+const attempts = Number(localStorage.getItem("login_attempts") || "0");
+const lockUntil = Number(localStorage.getItem("login_lock_until") || "0");
+
+if(lockUntil && Date.now() < lockUntil){
+
+const seconds = Math.ceil((lockUntil - Date.now()) / 1000);
+setError(`Demasiados intentos. Espera ${seconds}s`);
+return;
+
+}
+
 const saved = await databaseService.getMasterPassword();
 
 if(!saved) return;
@@ -181,6 +195,9 @@ if(!saved) return;
 const match = bcrypt.compareSync(password,saved);
 
 if(match){
+
+localStorage.setItem("login_attempts","0");
+localStorage.removeItem("login_lock_until");
 
 const salt = localStorage.getItem("vault_salt");
 
@@ -197,11 +214,31 @@ await biometricService.storeKey(key);
 
 unlock();
 
+const exists = await backupExistsOnDrive();
+
+if(exists){
+setShowRestore(true);
+}
+
 }else{
 
 sessionStorage.removeItem("vaultKey");
 
+let newAttempts = attempts + 1;
+
+if(newAttempts >= 5){
+
+localStorage.setItem("login_lock_until",(Date.now() + 30000).toString());
+localStorage.setItem("login_attempts","0");
+
+setError("Demasiados intentos. Espera 30 segundos");
+
+}else{
+
+localStorage.setItem("login_attempts",newAttempts.toString());
 setError("Contraseña incorrecta");
+
+}
 
 }
 
@@ -234,6 +271,39 @@ return;
 sessionStorage.setItem("vaultKey",key);
 
 unlock();
+
+const exists = await backupExistsOnDrive();
+
+if(exists){
+setShowRestore(true);
+}
+
+};
+
+////////////////////////////
+
+const restoreBackup = async ()=>{
+
+const backupPassword = localStorage.getItem("backup_key");
+
+if(!backupPassword){
+setError("Debes ingresar la clave de backup primero");
+return;
+}
+
+try{
+
+const total = await restoreBackupFromDrive(backupPassword);
+
+setError("");
+
+alert(`Se restauraron ${total} contraseñas`);
+
+}catch(e){
+
+setError("No se pudo restaurar el backup");
+
+}
 
 };
 
@@ -268,7 +338,7 @@ return(
 <IonPage>
 
 <IonContent className="ion-padding">
-
+<br /><br />
 <h2 style={{textAlign:"center"}}>
 
 {hasPassword
@@ -359,7 +429,7 @@ Desbloquear con huella
 </IonButton>
 
 )}
-
+<br />
 {hasPassword && (
 
 <IonButton
@@ -373,13 +443,40 @@ Olvidé mi contraseña
 </IonButton>
 
 )}
+<br />
+<IonButton onClick={()=>setShowHelp(true)}>
+Guía / FAQ
+</IonButton>
 
+<HelpModal
+isOpen={showHelp}
+onClose={()=>setShowHelp(false)}
+/>
+<br />
 <IonAlert
 isOpen={showAlert}
 header="Contraseña creada"
 message="La contraseña maestra se creó correctamente."
 buttons={["OK"]}
 onDidDismiss={()=>setShowAlert(false)}
+/>
+
+<IonAlert
+isOpen={showRestore}
+header="Backup encontrado"
+message="Se encontró un backup en Google Drive ¿Deseas restaurarlo?"
+buttons={[
+{
+text:"Omitir",
+role:"cancel",
+handler:()=>setShowRestore(false)
+},
+{
+text:"Restaurar",
+handler:()=>restoreBackup()
+}
+]}
+onDidDismiss={()=>setShowRestore(false)}
 />
 
 </IonContent>

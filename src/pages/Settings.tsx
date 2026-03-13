@@ -10,8 +10,13 @@ IonText,
 IonProgressBar,
 IonIcon,
 IonItem,
+IonAlert,
 IonCard
 } from "@ionic/react";
+
+import { restoreBackupFromDrive } from "../services/gdriveBackup";
+
+import { uploadBackupToDrive } from "../services/gdriveBackup";
 
 import { eye, eyeOff } from 'ionicons/icons';
 
@@ -196,6 +201,8 @@ setError(e.message || "Error al exportar");
 
 }
 
+localStorage.setItem("backup_key",backupKey);
+
 };
 
 /* -----------------------------
@@ -274,17 +281,29 @@ return(
 
 <h2 style={{textAlign:"center"}}>Configuración</h2>
 
-{error && (
-<IonText color="danger">
-<p style={{textAlign:"center"}}>{error}</p>
-</IonText>
-)}
+<IonAlert
+  isOpen={!!error}
+  header="Error"
+  message={error}
+  buttons={[
+    {
+      text: "OK",
+      handler: () => setError("")
+    }
+  ]}
+/>
 
-{msg && (
-<IonText color="success">
-<p style={{textAlign:"center"}}>{msg}</p>
-</IonText>
-)}
+<IonAlert
+  isOpen={!!msg}
+  header="Correcto"
+  message={msg}
+  buttons={[
+    {
+      text: "OK",
+      handler: () => setMsg("")
+    }
+  ]}
+/>
 
 
 <IonCard color="light" style={{padding:"10px", border:"1px solid lightgray"}}>
@@ -440,7 +459,48 @@ Restaurar backup
 
 </IonCard>
 <br/>
+<IonButton expand="block" onClick={async()=>{
 
+try{
+
+await uploadBackupToDrive(backupKey);
+
+setMsg("Backup subido a Google Drive");
+
+}catch(e:any){
+
+setError("No se pudo subir el backup");
+
+}
+
+}}>
+Backup en Google Drive
+</IonButton>
+<br />
+<IonButton expand="block" color="tertiary" onClick={async()=>{
+
+if(!importPassword){
+setError("Debes escribir la contraseña del backup");
+return;
+}
+
+try{
+
+const total = await restoreBackupFromDrive(importPassword);
+
+setMsg(`Backup restaurado desde Google Drive.
+${total} contraseñas importadas.`);
+
+}catch(e:any){
+
+setError(e.message || "Error restaurando backup");
+
+}
+
+}}>
+Restaurar desde Google Drive
+</IonButton>
+<br />
 <IonButton
 expand="block"
 color="medium"

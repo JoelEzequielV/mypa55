@@ -1,9 +1,10 @@
-//src/pages/Home.tsx
+//Home.tsx
 import { useState,useEffect } from "react";
 import "./Home.css";
 import { getSiteIcon } from "../utils/siteIcon";
 import SecurityDashboard from "../components/SecurityDashboard";
 import { checkPwnedPassword } from "../utils/pwnedPassword";
+
 import {
 IonCard,
 IonCardHeader,
@@ -26,7 +27,7 @@ IonText,
 IonModal
 } from "@ionic/react";
 
-import { eye, eyeOff, star, starOutline, copy, trash, add } from 'ionicons/icons';
+import { eye, eyeOff, star, starOutline, copy, trash, add, create } from 'ionicons/icons';
 
 import { generatePassword } from "../utils/passwordGenerator";
 import { checkPasswordStrength } from "../utils/passwordStrength";
@@ -42,8 +43,11 @@ interface Props{
 openSettings:()=>void
 }
 
+const ITEMS_PER_PAGE = 8;
+
 const Home:React.FC<Props> = ({openSettings})=>{
 
+const [pwnedTimeout,setPwnedTimeout] = useState<any>(null)
 const [search,setSearch] = useState("");
 const [showPassword,setShowPassword] = useState(false);
 
@@ -51,14 +55,22 @@ const [site,setSite] = useState("");
 const [username,setUsername] = useState("");
 const [password,setPassword] = useState("");
 
+const [editingId,setEditingId] = useState<number|null>(null);
+
 const [strength,setStrength] = useState(0);
 const [strengthText,setStrengthText] = useState("");
+
+const [pwned,setPwned] = useState(false);
 
 const [showPasswords,setShowPasswords] = useState(false);
 
 const [passwords,setPasswords] = useState<any[]>([]);
 const [favorites,setFavorites] = useState<number[]>([]);
 const [visiblePasswords,setVisiblePasswords] = useState<number[]>([]);
+
+const [showOnlyFavorites,setShowOnlyFavorites] = useState(false);
+
+const [page,setPage] = useState(1);
 
 const [toastMessage,setToastMessage] = useState("");
 const [showToast,setShowToast] = useState(false);
@@ -71,12 +83,33 @@ const isNative = Capacitor.isNativePlatform();
 ANALIZAR FUERZA
 ----------------------------- */
 
-const analyzePassword=(pass:string)=>{
+const analyzePassword = (pass:string)=>{
 
 const result = checkPasswordStrength(pass)
 
 setStrength(result.level)
 setStrengthText(result.text)
+
+if(pwnedTimeout){
+clearTimeout(pwnedTimeout)
+}
+
+const timeout = setTimeout(async ()=>{
+
+try{
+
+const compromised = await checkPwnedPassword(pass)
+setPwned(compromised)
+
+}catch{
+
+setPwned(false)
+
+}
+
+},800)
+
+setPwnedTimeout(timeout)
 
 }
 
@@ -105,6 +138,10 @@ try{
 const data = await databaseService.getPasswords(key);
 setPasswords(data);
 
+if(page > Math.ceil(data.length / ITEMS_PER_PAGE)){
+setPage(1)
+}
+
 }catch(e){
 
 console.warn("Error cargando contraseñas",e);
@@ -115,7 +152,7 @@ setPasswords([]);
 };
 
 /* -----------------------------
-DETECTAR CONTRASEÑAS REUTILIZADAS
+DETECTAR REUTILIZADAS
 ----------------------------- */
 
 const isReusedPassword = (password:string)=>{
@@ -148,7 +185,7 @@ JSON.stringify(favorites)
 },[favorites]);
 
 /* -----------------------------
-GUARDAR CONTRASEÑA
+GUARDAR / EDITAR
 ----------------------------- */
 
 const savePassword = async () => {
@@ -161,17 +198,21 @@ return;
 
 }
 
-const result = checkPasswordStrength(password)
-
-if(result.text==="Muy débil"){
-
-setToastMessage("⚠️ Contraseña muy débil");
-setShowToast(true);
-return;
-
-}
-
 const key = sessionStorage.getItem("vaultKey") || "default_key";
+
+if(editingId){
+
+await databaseService.updatePassword(
+editingId,
+site,
+username,
+password,
+key
+);
+
+setToastMessage("Contraseña actualizada");
+
+}else{
 
 await databaseService.addPassword(
 site,
@@ -180,28 +221,40 @@ password,
 key
 );
 
+setToastMessage("Contraseña guardada");
+
+}
+
 await loadPasswords();
 
 setSite("");
 setUsername("");
 setPassword("");
+setEditingId(null)
 
 setShowModal(false)
 
-setToastMessage("Contraseña guardada");
 setShowToast(true);
 
-const pwned = await checkPwnedPassword(password)
+};
 
-if(pwned.pwned){
+/* -----------------------------
+EDITAR
+----------------------------- */
 
-setToastMessage(`⚠️ Esta contraseña fue filtrada ${pwned.count} veces`)
-setShowToast(true)
-return
+const editPassword = (item:any)=>{
+
+setEditingId(item.id)
+
+setSite(item.title)
+setUsername(item.username)
+setPassword(item.password)
+
+analyzePassword(item.password)
+
+setShowModal(true)
 
 }
-
-};
 
 /* -----------------------------
 ELIMINAR
@@ -236,9 +289,13 @@ string: password
 
 navigator.clipboard.writeText(password);
 
-}
+setTimeout(()=>{
+navigator.clipboard.writeText("");
+},60000);
 
-setToastMessage("Contraseña copiada");
+}
+navigator.vibrate(50);
+setToastMessage("Contraseña copiada, Se borrará del portapapeles en 60 segundos. ");
 setShowToast(true);
 
 };
@@ -282,22 +339,10 @@ setVisiblePasswords([...visiblePasswords,id]);
 };
 
 /* -----------------------------
-SALIR
+FILTRAR + ORDENAR
 ----------------------------- */
 
-const exitApp = () => {
-
-if(isNative){
-CapacitorApp.exitApp();
-}
-
-};
-
-/* -----------------------------
-BUSCAR
------------------------------ */
-
-const filteredPasswords = passwords
+let filteredPasswords = passwords
 .filter((item)=>{
 
 const q = search.toLowerCase();
@@ -315,7 +360,26 @@ const bFav = favorites.includes(b.id);
 
 return Number(bFav) - Number(aFav);
 
-});
+})
+
+if(showOnlyFavorites){
+
+filteredPasswords = filteredPasswords.filter(p =>
+favorites.includes(p.id)
+)
+
+}
+
+/* -----------------------------
+PAGINACIÓN
+----------------------------- */
+
+const totalPages = Math.max(1, Math.ceil(filteredPasswords.length / ITEMS_PER_PAGE))
+
+const paginated = filteredPasswords.slice(
+(page-1)*ITEMS_PER_PAGE,
+page*ITEMS_PER_PAGE
+)
 
 return(
 
@@ -332,48 +396,61 @@ return(
 <IonButton expand="block" color="secondary" onClick={openSettings}>
 Configuración
 </IonButton>
+<br />
 
-<IonButton
-expand="block"
-color="primary"
-onClick={()=>setShowModal(true)}
->
-
+<IonButton expand="block" color="primary" onClick={()=>{
+setSite("")
+setUsername("")
+setPassword("")
+setEditingId(null)
+setPwned(false)
+setStrength(0)
+setStrengthText("")
+setShowModal(true)
+}}>
 <IonIcon icon={add} slot="start"/>
 Nueva contraseña
-
 </IonButton>
 
 <SecurityDashboard passwords={passwords}/>
 <h3>Total guardadas: {passwords.length}</h3>
 
-
-<IonButton
-expand="block"
-color="warning"
-onClick={()=>setShowPasswords(!showPasswords)}
->
-
+<IonButton expand="block" color="warning" onClick={()=>setShowPasswords(!showPasswords)}>
 {showPasswords ? "Ocultar contraseñas":"Mostrar contraseñas"}
-
 </IonButton>
 
 {showPasswords && (
 
 <IonList>
+
 <IonSearchbar
 placeholder="Buscar contraseña..."
 value={search}
 onIonInput={(e)=>setSearch(e.detail.value!)}
 />
 
-{filteredPasswords.map((item)=>{
+<IonButton
+expand="block"
+color="tertiary"
+onClick={()=>{
+setShowOnlyFavorites(!showOnlyFavorites)
+setPage(1)
+}}
+>
+
+{showOnlyFavorites
+? "Mostrar todas"
+: "Mostrar solo favoritos"}
+
+</IonButton>
+
+{paginated.map((item)=>{
 
 const reused = isReusedPassword(item.password)
 
 return(
 
-<IonCard key={item.id} style={{border:"1px solid lightgray"}}>
+<IonCard key={item.id}>
 
 <IonCardHeader style={{display:"flex",alignItems:"center",gap:"10px"}}>
 
@@ -431,10 +508,19 @@ visiblePasswords.includes(item.id)
 </IonText>
 
 )}
+{checkPasswordStrength(item.password).level < 0.4 && (
+
+<IonText color="warning">
+<p style={{fontSize:"12px"}}>
+⚠️ Contraseña débil
+</p>
+</IonText>
+
+)}
 
 <IonButton
-size="small"
 color="secondary"
+size="small"
 onClick={()=>toggleVisiblePassword(item.id)}
 >
 
@@ -459,6 +545,16 @@ onClick={()=>copyPassword(item.password)}
 
 <IonButton
 size="small"
+color="medium"
+onClick={()=>editPassword(item)}
+>
+
+<IonIcon icon={create}/>
+
+</IonButton>
+
+<IonButton
+size="small"
 color="danger"
 onClick={()=>deletePassword(item.id)}
 >
@@ -475,17 +571,43 @@ onClick={()=>deletePassword(item.id)}
 
 })}
 
+<div style={{textAlign:"center"}}>
+
+<IonButton
+disabled={page===1}
+onClick={()=>setPage(page-1)}
+>
+
+Anterior
+
+</IonButton>
+
+<span style={{margin:"0 10px"}}>
+Página {page} / {totalPages || 1}
+</span>
+
+<IonButton
+disabled={page===totalPages}
+onClick={()=>setPage(page+1)}
+>
+
+Siguiente
+
+</IonButton>
+
+</div>
+
 </IonList>
 
 )}
-
-{/* MODAL */}
 
 <IonModal isOpen={showModal} onDidDismiss={()=>setShowModal(false)}>
 
 <IonContent className="ion-padding">
 
-<h2>Nueva contraseña</h2>
+<h2>
+{editingId ? "Editar contraseña" : "Nueva contraseña"}
+</h2>
 
 <IonItem>
 <IonInput
@@ -540,6 +662,14 @@ Seguridad: {strengthText}
 </p>
 </IonText>
 
+{pwned && (
+<IonText color="danger">
+<p style={{fontSize:"12px"}}>
+⚠️ Esta contraseña apareció en filtraciones públicas
+</p>
+</IonText>
+)}
+
 <IonButton
 expand="block"
 color="warning"
@@ -554,19 +684,29 @@ analyzePassword(pass)
 >
 Generar contraseña segura
 </IonButton>
-<br />
+
+<br/>
+
 <IonButton
 expand="block"
 color="primary"
 onClick={savePassword}
 >
-Guardar contraseña
+{editingId ? "Actualizar contraseña" : "Guardar contraseña"}
 </IonButton>
-<br />
+
+<br/>
+
 <IonButton
 expand="block"
 color="medium"
-onClick={()=>setShowModal(false)}
+onClick={()=>{
+setShowModal(false)
+setEditingId(null)
+setPwned(false)
+setStrength(0)
+setStrengthText("")
+}}
 >
 Cancelar
 </IonButton>
@@ -581,13 +721,9 @@ message={toastMessage}
 duration={1500}
 onDidDismiss={()=>setShowToast(false)}
 />
-
-<br />
-<hr />
-
-
+<p><br /><br /></p>
 </IonContent>
-<br /><br />
+
 </IonPage>
 
 );
